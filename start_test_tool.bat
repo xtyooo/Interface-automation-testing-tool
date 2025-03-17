@@ -1,38 +1,63 @@
 @echo off
-chcp 936 >nul
-echo ÕıÔÚÆô¶¯½Ó¿Ú×Ô¶¯»¯²âÊÔ¹¤¾ß...
+:: è®¾ç½®æ§åˆ¶å°ä»£ç é¡µä¸ºUTF-8
+chcp 65001 >nul
 
-:: ¼ì²éPythonÊÇ·ñ°²×°
+:: è®¾ç½®Pythonç¯å¢ƒå˜é‡
+set PYTHONIOENCODING=utf-8
+
+echo æ­£åœ¨å¯åŠ¨æ¥å£è‡ªåŠ¨åŒ–æµ‹è¯•å·¥å…·...
+
+:: æ£€æŸ¥Pythonæ˜¯å¦å®‰è£…
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ´íÎó: Î´¼ì²âµ½Python°²×°£¬Çë°²×°Python 3.6»ò¸ü¸ß°æ±¾¡£
+    echo é”™è¯¯: æœªæ£€æµ‹åˆ°Pythonå®‰è£…ï¼Œè¯·å®‰è£…Python 3.6æˆ–æ›´é«˜ç‰ˆæœ¬
     pause
     exit /b 1
 )
 
-:: ¼ì²é²¢°²×°±ØÒªµÄ¿â
-echo ÕıÔÚ¼ì²é±ØÒªµÄ¿â...
+:: æ£€æŸ¥å¹¶å®‰è£…å¿…è¦çš„åº“
+echo æ­£åœ¨æ£€æŸ¥å¿…è¦çš„åº“...
 python -c "import pandas" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ÕıÔÚ°²×°pandas...
+    echo æ­£åœ¨å®‰è£…pandas...
     pip install pandas
 )
 
 python -c "import openpyxl" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ÕıÔÚ°²×°openpyxl...
+    echo æ­£åœ¨å®‰è£…openpyxl...
     pip install openpyxl
 )
 
-:: ´´½¨±ØÒªµÄÄ¿Â¼
+python -c "import transformers" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo æ­£åœ¨å®‰è£…transformers...
+    pip install transformers
+)
+
+python -c "import torch" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo æ­£åœ¨å®‰è£…torch...
+    pip install torch
+)
+
+python -c "import sklearn" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo æ­£åœ¨å®‰è£…scikit-learn...
+    pip install scikit-learn
+)
+
+:: åˆ›å»ºå¿…è¦çš„ç›®å½•
 if not exist output mkdir output
 if not exist analysis_results mkdir analysis_results
 
-:: Æô¶¯GUIÓ¦ÓÃ
-echo Æô¶¯²âÊÔ¹¤¾ß...
-python gui_test.py
+:: ç›´æ¥å¯åŠ¨Pythonç¨‹åº
+echo å¯åŠ¨æµ‹è¯•å·¥å…·...
+python -u gui_test.py
 
 if %errorlevel% neq 0 (
-    echo ³ÌĞòÒì³£ÍË³ö£¬´íÎó´úÂë: %errorlevel%
+    echo ç¨‹åºå¼‚å¸¸é€€å‡ºï¼Œé”™è¯¯ä»£ç : %errorlevel%
     pause
-) 
+)
+
+reg add HKCU\Console /v CodePage /t REG_DWORD /d 65001 /f 
