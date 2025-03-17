@@ -332,6 +332,17 @@ class AutoTestGUI:
         interval_entry = ttk.Entry(interval_frame, textvariable=self.interval_var, width=10)
         interval_entry.pack(side=tk.LEFT, padx=5)
         
+        # 线程数量设置
+        threads_frame = ttk.Frame(advanced_frame)
+        threads_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(threads_frame, text="并发线程数:").pack(side=tk.LEFT, padx=5)
+        self.threads_var = tk.StringVar(value="3")
+        threads_entry = ttk.Entry(threads_frame, textvariable=self.threads_var, width=10)
+        threads_entry.pack(side=tk.LEFT, padx=5)
+        threads_info = ttk.Label(threads_frame, text="(建议不超过10，避免请求过于频繁)")
+        threads_info.pack(side=tk.LEFT, padx=5)
+        
         # 详细日志
         self.verbose_var = tk.BooleanVar(value=False)
         verbose_check = ttk.Checkbutton(advanced_frame, text="显示详细日志", variable=self.verbose_var)
@@ -490,38 +501,68 @@ class AutoTestGUI:
             # 添加"真实测试结果"列
             df["真实测试结果"] = ""
             
+            # 获取线程数
+            try:
+                num_threads = int(self.threads_var.get())
+                if num_threads <= 0:
+                    raise ValueError("线程数必须大于0")
+            except ValueError:
+                self.log("错误: 无效的线程数，将使用默认值3")
+                num_threads = 3
+            
+            # 创建线程池
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
             # 遍历每个问题
             total = len(df)
             success_count = 0
             fail_count = 0
             
-            self.log(f"共有 {total} 个测试用例")
+            self.log(f"共有 {total} 个测试用例，使用 {num_threads} 个线程处理")
             
+            # 创建任务列表
+            tasks = []
             for i, row in df.iterrows():
-                # 检查是否需要停止
-                if self.stop_event.is_set():
-                    self.log("测试已手动停止")
-                    break
+                tasks.append((i, row["测试问题"]))
+            
+            # 使用线程池处理请求
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                # 提交所有任务
+                future_to_idx = {
+                    executor.submit(self.custom_send_request, query, agent_token): (idx, query)
+                    for idx, query in tasks
+                }
                 
-                query = row["测试问题"]
-                self.log(f"处理问题 {i+1}/{total}: {query[:50]}...")
-                
-                # 发送请求，使用自定义的agent_token
-                response_text = self.custom_send_request(query, agent_token)
-                
-                if response_text:
-                    # 提取答案
-                    answer = extract_answer(response_text)
-                    df.at[i, "真实测试结果"] = answer
+                # 处理完成的任务
+                for future in as_completed(future_to_idx):
+                    idx, query = future_to_idx[future]
                     
-                    # 请求成功就算成功
-                    success_count += 1
-                else:
-                    df.at[i, "真实测试结果"] = "请求失败"
-                    fail_count += 1
-                
-                # 每次请求之间稍作暂停，避免请求过于频繁
-                time.sleep(1)
+                    # 检查是否需要停止
+                    if self.stop_event.is_set():
+                        self.log("测试已手动停止")
+                        executor.shutdown(wait=False)
+                        break
+                    
+                    try:
+                        response_text = future.result()
+                        if response_text:
+                            # 提取答案
+                            answer = extract_answer(response_text)
+                            df.at[idx, "真实测试结果"] = answer
+                            success_count += 1
+                            self.log(f"完成问题 {idx+1}/{total}: {query[:50]}...")
+                        else:
+                            df.at[idx, "真实测试结果"] = "请求失败"
+                            fail_count += 1
+                            self.log(f"问题 {idx+1}/{total} 请求失败")
+                        
+                        # 每处理一批请求后暂停一下，避免请求过于频繁
+                        time.sleep(interval)
+                        
+                    except Exception as e:
+                        df.at[idx, "真实测试结果"] = f"处理出错: {str(e)}"
+                        fail_count += 1
+                        self.log(f"处理问题 {idx+1} 时出错: {e}")
             
             # 保存结果
             df.to_excel(output_file, index=False)
