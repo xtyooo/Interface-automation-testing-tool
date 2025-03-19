@@ -293,6 +293,34 @@ class AutoTestGUI:
         agent_entry = ttk.Entry(agent_frame, textvariable=self.agent_token_var, width=50)
         agent_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
+        # 主机地址设置
+        host_frame = ttk.Frame(settings_frame)
+        host_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(host_frame, text="服务器地址:").pack(side=tk.LEFT, padx=5)
+        self.host_var = tk.StringVar(value="127.0.0.1")
+        host_entry = ttk.Entry(host_frame, textvariable=self.host_var, width=30)
+        host_entry.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(host_frame, text="端口:").pack(side=tk.LEFT, padx=5)
+        self.port_var = tk.StringVar(value="80")
+        port_entry = ttk.Entry(host_frame, textvariable=self.port_var, width=10)
+        port_entry.pack(side=tk.LEFT, padx=5)
+        
+        # 预设服务器下拉菜单
+        self.preset_servers = {
+            "本地服务器": ("127.0.0.1", "80"),
+            "测试服务器": ("test.example.com", "80"),
+            "生产服务器": ("prod.example.com", "443")
+        }
+        
+        ttk.Label(host_frame, text="预设:").pack(side=tk.LEFT, padx=5)
+        self.preset_server_var = tk.StringVar()
+        preset_server_combo = ttk.Combobox(host_frame, textvariable=self.preset_server_var, 
+                                         values=list(self.preset_servers.keys()), width=15)
+        preset_server_combo.pack(side=tk.LEFT, padx=5)
+        preset_server_combo.bind("<<ComboboxSelected>>", self.on_preset_server_selected)
+        
         # 预设智能体下拉菜单
         self.preset_agents = {
             "默认智能体": "app-CmBCgYDKd9yGjmgV1PnNSeZ4",
@@ -420,6 +448,16 @@ class AutoTestGUI:
         if selected in self.preset_agents:
             self.agent_token_var.set(self.preset_agents[selected])
     
+    def on_preset_server_selected(self, event):
+        """
+        当选择预设服务器时更新主机地址和端口
+        """
+        selected = self.preset_server_var.get()
+        if selected in self.preset_servers:
+            host, port = self.preset_servers[selected]
+            self.host_var.set(host)
+            self.port_var.set(port)
+    
     def log(self, message):
         self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
@@ -441,6 +479,20 @@ class AutoTestGUI:
         agent_token = self.agent_token_var.get().strip()
         if not agent_token:
             messagebox.showerror("错误", "请输入智能体Token")
+            return
+        
+        # 验证主机地址和端口
+        host = self.host_var.get().strip()
+        if not host:
+            messagebox.showerror("错误", "请输入服务器地址")
+            return
+        
+        try:
+            port = int(self.port_var.get().strip())
+            if port <= 0 or port > 65535:
+                raise ValueError("端口号必须在1-65535之间")
+        except ValueError as e:
+            messagebox.showerror("错误", f"无效的端口号: {str(e)}")
             return
         
         try:
@@ -589,25 +641,31 @@ class AutoTestGUI:
         """
         使用自定义token发送HTTP请求并返回响应
         """
-        conn = http.client.HTTPConnection("127.0.0.1")
-        
-        payload = json.dumps({
-            "inputs": {},
-            "query": query,
-            "user": "testAPI"
-        })
-        
-        headers = {
-            'Authorization': f'Bearer {agent_token}',
-            'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
-            'Content-Type': 'application/json',
-            'Accept': '*/*',
-            'Host': '127.0.0.1',
-            'Connection': 'keep-alive'
-        }
+        host = self.host_var.get().strip()
+        port = int(self.port_var.get().strip())
         
         try:
-            logging.info(f"发送请求: {query[:50]}...")
+            if port == 443:
+                conn = http.client.HTTPSConnection(host)
+            else:
+                conn = http.client.HTTPConnection(host, port)
+            
+            payload = json.dumps({
+                "inputs": {},
+                "query": query,
+                "user": "testAPI"
+            })
+            
+            headers = {
+                'Authorization': f'Bearer {agent_token}',
+                'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
+                'Content-Type': 'application/json',
+                'Accept': '*/*',
+                'Host': host,
+                'Connection': 'keep-alive'
+            }
+            
+            logging.info(f"发送请求到 {host}:{port}: {query[:50]}...")
             conn.request("POST", "/v1/chat-messages", payload, headers)
             res = conn.getresponse()
             

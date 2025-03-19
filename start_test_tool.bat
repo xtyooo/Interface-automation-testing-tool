@@ -59,5 +59,4 @@ if %errorlevel% neq 0 (
     echo 程序异常退出，错误代码: %errorlevel%
     pause
 )
-
 reg add HKCU\Console /v CodePage /t REG_DWORD /d 65001 /f 
